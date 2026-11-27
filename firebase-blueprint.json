@@ -1,0 +1,522 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Core authenticated user record with role, status, and language preference.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "email": { "type": "string", "format": "email", "maxLength": 200 },
+        "fullName": { "type": "string", "maxLength": 120 },
+        "phone": { "type": "string", "maxLength": 30 },
+        "role": { "type": "string", "enum": ["farmer", "buyer", "provider", "expert", "admin"] },
+        "preferredLanguage": { "type": "string", "enum": ["en", "ta"] },
+        "verificationStatus": { "type": "string", "enum": ["pending", "verified", "rejected"] },
+        "accountStatus": { "type": "string", "enum": ["active", "suspended"] },
+        "state": { "type": "string", "maxLength": 80 },
+        "district": { "type": "string", "maxLength": 80 },
+        "village": { "type": "string", "maxLength": 100 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "fullName", "role", "preferredLanguage", "verificationStatus", "accountStatus", "createdAt", "updatedAt"]
+    },
+    "FarmerProfile": {
+      "title": "FarmerProfile",
+      "description": "Extended agricultural onboarding profile for a farmer.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "fullName": { "type": "string", "maxLength": 120 },
+        "phone": { "type": "string", "maxLength": 30 },
+        "state": { "type": "string", "maxLength": 80 },
+        "district": { "type": "string", "maxLength": 80 },
+        "village": { "type": "string", "maxLength": 100 },
+        "farmName": { "type": "string", "maxLength": 120 },
+        "farmAreaAcres": { "type": "number" },
+        "preferredLanguage": { "type": "string", "enum": ["en", "ta"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "fullName", "phone", "state", "district", "village", "farmAreaAcres", "preferredLanguage", "createdAt", "updatedAt"]
+    },
+    "BuyerProfile": {
+      "title": "BuyerProfile",
+      "description": "Buyer business or individual profile.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "businessName": { "type": "string", "maxLength": 150 },
+        "phone": { "type": "string", "maxLength": 30 },
+        "location": { "type": "string", "maxLength": 160 },
+        "buyerCategory": { "type": "string", "enum": ["individual", "retailer", "wholesaler", "processor", "exporter"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "businessName", "phone", "location", "buyerCategory", "createdAt", "updatedAt"]
+    },
+    "ProviderProfile": {
+      "title": "ProviderProfile",
+      "description": "Agricultural service provider profile.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "businessName": { "type": "string", "maxLength": 150 },
+        "serviceCategory": { "type": "string", "maxLength": 80 },
+        "contactPhone": { "type": "string", "maxLength": 30 },
+        "operatingLocation": { "type": "string", "maxLength": 160 },
+        "serviceDescription": { "type": "string", "maxLength": 1000 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "businessName", "serviceCategory", "contactPhone", "operatingLocation", "serviceDescription", "createdAt", "updatedAt"]
+    },
+    "ExpertProfile": {
+      "title": "ExpertProfile",
+      "description": "Agricultural expert profile.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "fullName": { "type": "string", "maxLength": 120 },
+        "specialization": { "type": "string", "maxLength": 120 },
+        "qualification": { "type": "string", "maxLength": 150 },
+        "organization": { "type": "string", "maxLength": 150 },
+        "operatingRegion": { "type": "string", "maxLength": 120 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "fullName", "specialization", "qualification", "operatingRegion", "createdAt", "updatedAt"]
+    },
+    "Farm": {
+      "title": "Farm",
+      "description": "Registered farm owned by a farmer.",
+      "type": "object",
+      "properties": {
+        "farmerId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "name": { "type": "string", "maxLength": 120 },
+        "areaAcres": { "type": "number" },
+        "soilType": { "type": "string", "maxLength": 80 },
+        "waterSource": { "type": "string", "maxLength": 80 },
+        "state": { "type": "string", "maxLength": 80 },
+        "district": { "type": "string", "maxLength": 80 },
+        "village": { "type": "string", "maxLength": 100 },
+        "latitude": { "type": "number" },
+        "longitude": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["farmerId", "name", "areaAcres", "soilType", "waterSource", "state", "district", "createdAt", "updatedAt"]
+    },
+    "Field": {
+      "title": "Field",
+      "description": "Individual plot or field within a farm.",
+      "type": "object",
+      "properties": {
+        "farmerId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "farmId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "name": { "type": "string", "maxLength": 100 },
+        "areaAcres": { "type": "number" },
+        "irrigationMethod": { "type": "string", "maxLength": 80 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["farmerId", "farmId", "name", "areaAcres", "irrigationMethod", "createdAt", "updatedAt"]
+    },
+    "Crop": {
+      "title": "Crop",
+      "description": "Cultivated crop record with yield, expenses, and health status.",
+      "type": "object",
+      "properties": {
+        "farmerId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "farmId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "cropName": { "type": "string", "maxLength": 100 },
+        "variety": { "type": "string", "maxLength": 100 },
+        "category": { "type": "string", "maxLength": 60 },
+        "areaAcres": { "type": "number" },
+        "plantingDate": { "type": "string", "maxLength": 30 },
+        "expectedHarvestDate": { "type": "string", "maxLength": 30 },
+        "expectedYieldKg": { "type": "number" },
+        "actualYieldKg": { "type": "number" },
+        "estimatedExpenseInr": { "type": "number" },
+        "stage": { "type": "string", "enum": ["sowing", "vegetative", "flowering", "harvesting", "harvested"] },
+        "healthStatus": { "type": "string", "enum": ["healthy", "watch", "at_risk"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["farmerId", "farmId", "cropName", "category", "areaAcres", "plantingDate", "stage", "healthStatus", "createdAt", "updatedAt"]
+    },
+    "CropActivity": {
+      "title": "CropActivity",
+      "description": "Logged cultivation activity or expense for a crop.",
+      "type": "object",
+      "properties": {
+        "farmerId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "cropId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "activityType": { "type": "string", "maxLength": 80 },
+        "date": { "type": "string", "maxLength": 30 },
+        "expenseInr": { "type": "number" },
+        "notes": { "type": "string", "maxLength": 500 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["farmerId", "cropId", "activityType", "date", "expenseInr", "createdAt"]
+    },
+    "SoilMeasurement": {
+      "title": "SoilMeasurement",
+      "description": "Manual or verified IoT soil measurement record.",
+      "type": "object",
+      "properties": {
+        "farmerId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "farmId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "fieldName": { "type": "string", "maxLength": 100 },
+        "sourceType": { "type": "string", "enum": ["manual_entry", "lab_report"] },
+        "ph": { "type": "number" },
+        "moisturePercent": { "type": "number" },
+        "temperatureC": { "type": "number" },
+        "nitrogenPpm": { "type": "number" },
+        "phosphorusPpm": { "type": "number" },
+        "potassiumPpm": { "type": "number" },
+        "recordedDate": { "type": "string", "maxLength": 30 },
+        "notes": { "type": "string", "maxLength": 500 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["farmerId", "farmId", "fieldName", "sourceType", "ph", "moisturePercent", "temperatureC", "nitrogenPpm", "phosphorusPpm", "potassiumPpm", "recordedDate", "createdAt"]
+    },
+    "IrrigationSchedule": {
+      "title": "IrrigationSchedule",
+      "description": "Planned or completed farm irrigation schedule entry.",
+      "type": "object",
+      "properties": {
+        "farmerId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "farmId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "cropName": { "type": "string", "maxLength": 100 },
+        "fieldName": { "type": "string", "maxLength": 100 },
+        "scheduledDate": { "type": "string", "maxLength": 30 },
+        "scheduledTime": { "type": "string", "maxLength": 20 },
+        "durationMinutes": { "type": "number" },
+        "waterVolumeLiters": { "type": "number" },
+        "method": { "type": "string", "enum": ["drip", "sprinkler", "furrow", "flood", "manual"] },
+        "status": { "type": "string", "enum": ["scheduled", "completed", "skipped"] },
+        "notes": { "type": "string", "maxLength": 500 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["farmerId", "farmId", "cropName", "fieldName", "scheduledDate", "scheduledTime", "durationMinutes", "waterVolumeLiters", "method", "status", "createdAt", "updatedAt"]
+    },
+    "PlantHealthReport": {
+      "title": "PlantHealthReport",
+      "description": "AI-assisted crop health analysis record.",
+      "type": "object",
+      "properties": {
+        "farmerId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "cropType": { "type": "string", "maxLength": 100 },
+        "observedSymptoms": { "type": "string", "maxLength": 1000 },
+        "possibleIssue": { "type": "string", "maxLength": 200 },
+        "confidenceLevel": { "type": "string", "enum": ["Low", "Moderate", "High"] },
+        "uncertaintyNote": { "type": "string", "maxLength": 600 },
+        "visibleSymptoms": { "type": "array" },
+        "contributingFactors": { "type": "array" },
+        "preventiveSteps": { "type": "array" },
+        "whenToConsultExpert": { "type": "string", "maxLength": 600 },
+        "imageName": { "type": "string", "maxLength": 200 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["farmerId", "cropType", "observedSymptoms", "possibleIssue", "confidenceLevel", "uncertaintyNote", "whenToConsultExpert", "createdAt"]
+    },
+    "MarketplaceListing": {
+      "title": "MarketplaceListing",
+      "description": "Agricultural produce listing published by a farmer.",
+      "type": "object",
+      "properties": {
+        "farmerId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "farmerName": { "type": "string", "maxLength": 120 },
+        "productName": { "type": "string", "maxLength": 120 },
+        "cropCategory": { "type": "string", "maxLength": 60 },
+        "quantity": { "type": "number" },
+        "unit": { "type": "string", "maxLength": 30 },
+        "pricePerUnitInr": { "type": "number" },
+        "harvestDate": { "type": "string", "maxLength": 30 },
+        "location": { "type": "string", "maxLength": 140 },
+        "description": { "type": "string", "maxLength": 1000 },
+        "imageUrl": { "type": "string", "maxLength": 500 },
+        "status": { "type": "string", "enum": ["available", "reserved", "sold_out", "flagged", "removed"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["farmerId", "farmerName", "productName", "cropCategory", "quantity", "unit", "pricePerUnitInr", "harvestDate", "location", "description", "status", "createdAt", "updatedAt"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Two-sided purchase request and fulfilment order between buyer and farmer.",
+      "type": "object",
+      "properties": {
+        "listingId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "productName": { "type": "string", "maxLength": 120 },
+        "farmerId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "farmerName": { "type": "string", "maxLength": 120 },
+        "buyerId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "buyerName": { "type": "string", "maxLength": 120 },
+        "quantity": { "type": "number" },
+        "unit": { "type": "string", "maxLength": 30 },
+        "pricePerUnitInr": { "type": "number" },
+        "totalAmountInr": { "type": "number" },
+        "deliveryLocation": { "type": "string", "maxLength": 200 },
+        "buyerNotes": { "type": "string", "maxLength": 500 },
+        "paymentSettlementStatus": { "type": "string", "enum": ["offline_agreed_pending"] },
+        "status": { "type": "string", "enum": ["pending", "accepted", "rejected", "processing", "ready_for_pickup", "shipped", "delivered", "cancelled", "completed"] },
+        "reviewRating": { "type": "number" },
+        "reviewComment": { "type": "string", "maxLength": 500 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["listingId", "productName", "farmerId", "farmerName", "buyerId", "buyerName", "quantity", "unit", "pricePerUnitInr", "totalAmountInr", "deliveryLocation", "paymentSettlementStatus", "status", "createdAt", "updatedAt"]
+    },
+    "ServiceListing": {
+      "title": "ServiceListing",
+      "description": "Agricultural equipment or service offered by a provider.",
+      "type": "object",
+      "properties": {
+        "providerId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "providerName": { "type": "string", "maxLength": 120 },
+        "title": { "type": "string", "maxLength": 120 },
+        "category": { "type": "string", "maxLength": 80 },
+        "rateInr": { "type": "number" },
+        "rateUnit": { "type": "string", "maxLength": 40 },
+        "operatingLocation": { "type": "string", "maxLength": 140 },
+        "description": { "type": "string", "maxLength": 1000 },
+        "availabilityStatus": { "type": "string", "enum": ["available", "busy", "paused"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["providerId", "providerName", "title", "category", "rateInr", "rateUnit", "operatingLocation", "description", "availabilityStatus", "createdAt", "updatedAt"]
+    },
+    "ServiceBooking": {
+      "title": "ServiceBooking",
+      "description": "Farmer booking request for an agricultural service.",
+      "type": "object",
+      "properties": {
+        "serviceId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "serviceTitle": { "type": "string", "maxLength": 120 },
+        "providerId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "providerName": { "type": "string", "maxLength": 120 },
+        "farmerId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "farmerName": { "type": "string", "maxLength": 120 },
+        "requestedDate": { "type": "string", "maxLength": 30 },
+        "location": { "type": "string", "maxLength": 160 },
+        "notes": { "type": "string", "maxLength": 500 },
+        "status": { "type": "string", "enum": ["pending", "accepted", "in_progress", "completed", "rejected", "cancelled"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["serviceId", "serviceTitle", "providerId", "providerName", "farmerId", "farmerName", "requestedDate", "location", "status", "createdAt", "updatedAt"]
+    },
+    "FarmTeamMember": {
+      "title": "FarmTeamMember",
+      "description": "Team member registered by a farm owner.",
+      "type": "object",
+      "properties": {
+        "farmerId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "memberName": { "type": "string", "maxLength": 120 },
+        "roleTitle": { "type": "string", "maxLength": 80 },
+        "phone": { "type": "string", "maxLength": 30 },
+        "assignedArea": { "type": "string", "maxLength": 120 },
+        "status": { "type": "string", "enum": ["active", "inactive"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["farmerId", "memberName", "roleTitle", "status", "createdAt"]
+    },
+    "FarmTask": {
+      "title": "FarmTask",
+      "description": "Assigned farm task with deadline and priority.",
+      "type": "object",
+      "properties": {
+        "farmerId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "taskName": { "type": "string", "maxLength": 140 },
+        "description": { "type": "string", "maxLength": 600 },
+        "assignedMemberName": { "type": "string", "maxLength": 120 },
+        "priority": { "type": "string", "enum": ["low", "medium", "high", "urgent"] },
+        "dueDate": { "type": "string", "maxLength": 30 },
+        "status": { "type": "string", "enum": ["todo", "in_progress", "completed"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["farmerId", "taskName", "assignedMemberName", "priority", "dueDate", "status", "createdAt", "updatedAt"]
+    },
+    "EcoPointsTransaction": {
+      "title": "EcoPointsTransaction",
+      "description": "Auditable sustainability claim or admin-verified Eco Points ledger entry.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "userName": { "type": "string", "maxLength": 120 },
+        "activityCategory": { "type": "string", "enum": ["water_saving", "recycling", "organic_composting", "soil_conservation", "reward_redemption", "admin_adjustment"] },
+        "description": { "type": "string", "maxLength": 500 },
+        "requestedPoints": { "type": "number" },
+        "awardedPoints": { "type": "number" },
+        "transactionType": { "type": "string", "enum": ["earn", "redeem"] },
+        "status": { "type": "string", "enum": ["pending", "verified", "rejected"] },
+        "reviewedBy": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "userName", "activityCategory", "description", "requestedPoints", "awardedPoints", "transactionType", "status", "createdAt", "updatedAt"]
+    },
+    "Reward": {
+      "title": "Reward",
+      "description": "Eco Points redeemable reward managed by administrators.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "maxLength": 120 },
+        "description": { "type": "string", "maxLength": 500 },
+        "pointsCost": { "type": "number" },
+        "category": { "type": "string", "maxLength": 60 },
+        "active": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "description", "pointsCost", "category", "active", "createdAt", "updatedAt"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "Database-backed user notification.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "senderId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "category": { "type": "string", "enum": ["order", "service", "support", "task", "verification", "announcement", "eco_points", "expert"] },
+        "title": { "type": "string", "maxLength": 140 },
+        "message": { "type": "string", "maxLength": 500 },
+        "read": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "senderId", "category", "title", "message", "read", "createdAt"]
+    },
+    "SupportTicket": {
+      "title": "SupportTicket",
+      "description": "User support ticket managed with administrators.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "userName": { "type": "string", "maxLength": 120 },
+        "userRole": { "type": "string", "maxLength": 30 },
+        "category": { "type": "string", "maxLength": 80 },
+        "subject": { "type": "string", "maxLength": 150 },
+        "description": { "type": "string", "maxLength": 1500 },
+        "attachmentName": { "type": "string", "maxLength": 200 },
+        "status": { "type": "string", "enum": ["open", "in_progress", "waiting_for_response", "resolved", "closed"] },
+        "adminResponse": { "type": "string", "maxLength": 1500 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "userName", "userRole", "category", "subject", "description", "status", "createdAt", "updatedAt"]
+    },
+    "PlatformAnnouncement": {
+      "title": "PlatformAnnouncement",
+      "description": "System-wide agricultural advisory or announcement published by admins.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "maxLength": 150 },
+        "body": { "type": "string", "maxLength": 1500 },
+        "audience": { "type": "string", "enum": ["all", "farmer", "buyer", "provider", "expert"] },
+        "active": { "type": "boolean" },
+        "authorId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "body", "audience", "active", "authorId", "createdAt"]
+    },
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "Immutable operational and administrative audit trail.",
+      "type": "object",
+      "properties": {
+        "actorId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "actorEmail": { "type": "string", "maxLength": 200 },
+        "action": { "type": "string", "maxLength": 120 },
+        "targetCollection": { "type": "string", "maxLength": 80 },
+        "targetId": { "type": "string", "maxLength": 128 },
+        "details": { "type": "string", "maxLength": 500 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["actorId", "action", "targetCollection", "targetId", "createdAt"]
+    },
+    "EducationalArticle": {
+      "title": "EducationalArticle",
+      "description": "Agronomy guide or educational content published by agricultural experts or admins.",
+      "type": "object",
+      "properties": {
+        "authorId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "authorName": { "type": "string", "maxLength": 120 },
+        "title": { "type": "string", "maxLength": 160 },
+        "category": { "type": "string", "maxLength": 80 },
+        "cropFocus": { "type": "string", "maxLength": 80 },
+        "summary": { "type": "string", "maxLength": 400 },
+        "content": { "type": "string", "maxLength": 5000 },
+        "language": { "type": "string", "enum": ["en", "ta"] },
+        "status": { "type": "string", "enum": ["published", "draft"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["authorId", "authorName", "title", "category", "summary", "content", "language", "status", "createdAt", "updatedAt"]
+    },
+    "ExpertQuestion": {
+      "title": "ExpertQuestion",
+      "description": "Farmer agricultural question or consultation request answered by experts.",
+      "type": "object",
+      "properties": {
+        "farmerId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "farmerName": { "type": "string", "maxLength": 120 },
+        "cropName": { "type": "string", "maxLength": 100 },
+        "question": { "type": "string", "maxLength": 1200 },
+        "isPublic": { "type": "boolean" },
+        "status": { "type": "string", "enum": ["open", "answered", "closed"] },
+        "answer": { "type": "string", "maxLength": 2500 },
+        "expertId": { "type": "string", "maxLength": 128 },
+        "expertName": { "type": "string", "maxLength": 120 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["farmerId", "farmerName", "cropName", "question", "isPublic", "status", "createdAt", "updatedAt"]
+    },
+    "PlatformSetting": {
+      "title": "PlatformSetting",
+      "description": "Global platform configuration controlled by administrators.",
+      "type": "object",
+      "properties": {
+        "maintenanceNotice": { "type": "string", "maxLength": 400 },
+        "ecoPointsDefaultReward": { "type": "number" },
+        "requireVerificationForListings": { "type": "boolean" },
+        "supportEmail": { "type": "string", "maxLength": 150 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ecoPointsDefaultReward", "requireVerificationForListings", "supportEmail", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": { "schema": { "$ref": "#/entities/User" }, "description": "User accounts and role records" },
+    "/farmer_profiles/{userId}": { "schema": { "$ref": "#/entities/FarmerProfile" }, "description": "Farmer onboarding profiles" },
+    "/buyer_profiles/{userId}": { "schema": { "$ref": "#/entities/BuyerProfile" }, "description": "Buyer onboarding profiles" },
+    "/provider_profiles/{userId}": { "schema": { "$ref": "#/entities/ProviderProfile" }, "description": "Service provider profiles" },
+    "/expert_profiles/{userId}": { "schema": { "$ref": "#/entities/ExpertProfile" }, "description": "Agricultural expert profiles" },
+    "/farms/{farmId}": { "schema": { "$ref": "#/entities/Farm" }, "description": "Registered farms" },
+    "/fields/{fieldId}": { "schema": { "$ref": "#/entities/Field" }, "description": "Farm fields" },
+    "/crops/{cropId}": { "schema": { "$ref": "#/entities/Crop" }, "description": "Active and harvested crops" },
+    "/crop_activities/{activityId}": { "schema": { "$ref": "#/entities/CropActivity" }, "description": "Crop activities and expenses" },
+    "/soil_measurements/{measurementId}": { "schema": { "$ref": "#/entities/SoilMeasurement" }, "description": "Manual and lab soil measurements" },
+    "/irrigation_schedules/{scheduleId}": { "schema": { "$ref": "#/entities/IrrigationSchedule" }, "description": "Irrigation schedules and water logs" },
+    "/plant_health_reports/{reportId}": { "schema": { "$ref": "#/entities/PlantHealthReport" }, "description": "AI-assisted plant health analyses" },
+    "/marketplace_listings/{listingId}": { "schema": { "$ref": "#/entities/MarketplaceListing" }, "description": "Agricultural produce listings" },
+    "/orders/{orderId}": { "schema": { "$ref": "#/entities/Order" }, "description": "Buyer-farmer purchase orders" },
+    "/service_listings/{serviceId}": { "schema": { "$ref": "#/entities/ServiceListing" }, "description": "Agricultural service offerings" },
+    "/service_bookings/{bookingId}": { "schema": { "$ref": "#/entities/ServiceBooking" }, "description": "Farmer service booking requests" },
+    "/farm_teams/{memberId}": { "schema": { "$ref": "#/entities/FarmTeamMember" }, "description": "Farm team members" },
+    "/farm_tasks/{taskId}": { "schema": { "$ref": "#/entities/FarmTask" }, "description": "Farm tasks and assignments" },
+    "/eco_points_transactions/{txId}": { "schema": { "$ref": "#/entities/EcoPointsTransaction" }, "description": "Auditable Eco Points transaction ledger" },
+    "/rewards/{rewardId}": { "schema": { "$ref": "#/entities/Reward" }, "description": "Eco Points reward catalogue" },
+    "/notifications/{notificationId}": { "schema": { "$ref": "#/entities/Notification" }, "description": "User notifications" },
+    "/support_tickets/{ticketId}": { "schema": { "$ref": "#/entities/SupportTicket" }, "description": "Support tickets" },
+    "/platform_announcements/{announcementId}": { "schema": { "$ref": "#/entities/PlatformAnnouncement" }, "description": "Platform announcements" },
+    "/audit_logs/{logId}": { "schema": { "$ref": "#/entities/AuditLog" }, "description": "Immutable audit logs" },
+    "/educational_articles/{articleId}": { "schema": { "$ref": "#/entities/EducationalArticle" }, "description": "Expert educational articles" },
+    "/expert_questions/{questionId}": { "schema": { "$ref": "#/entities/ExpertQuestion" }, "description": "Farmer-expert consultation Q&A" },
+    "/platform_settings/{settingId}": { "schema": { "$ref": "#/entities/PlatformSetting" }, "description": "Admin platform settings" }
+  }
+}

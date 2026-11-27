@@ -1,0 +1,917 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 1. Global Safety Net (Default Deny)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // ==================== GLOBAL HELPERS ====================
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidString(val, minLen, maxLen) {
+      return val is string && val.size() >= minLen && val.size() <= maxLen;
+    }
+
+    function isAdmin() {
+      return isVerifiedUser() && (
+        request.auth.token.email == 'thamizh.vishnu211@gmail.com' ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function isExpertUser() {
+      return isVerifiedUser() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'expert';
+    }
+
+    function ownsFarm(farmId) {
+      return isValidId(farmId) &&
+        exists(/databases/$(database)/documents/farms/$(farmId)) &&
+        get(/databases/$(database)/documents/farms/$(farmId)).data.farmerId == request.auth.uid;
+    }
+
+    // ==================== VALIDATION BLUEPRINTS ====================
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'email', 'fullName', 'role', 'preferredLanguage', 'verificationStatus', 'accountStatus', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['uid', 'email', 'fullName', 'phone', 'role', 'preferredLanguage', 'verificationStatus', 'accountStatus', 'state', 'district', 'village', 'createdAt', 'updatedAt']) &&
+        isValidId(data.uid) &&
+        isValidString(data.email, 3, 200) &&
+        isValidString(data.fullName, 1, 120) &&
+        (!('phone' in data) || isValidString(data.phone, 0, 30)) &&
+        data.role in ['farmer', 'buyer', 'provider', 'expert', 'admin'] &&
+        data.preferredLanguage in ['en', 'ta'] &&
+        data.verificationStatus in ['pending', 'verified', 'rejected'] &&
+        data.accountStatus in ['active', 'suspended'] &&
+        (!('state' in data) || isValidString(data.state, 0, 80)) &&
+        (!('district' in data) || isValidString(data.district, 0, 80)) &&
+        (!('village' in data) || isValidString(data.village, 0, 100)) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidFarmerProfile(data) {
+      return data.keys().hasAll(['userId', 'fullName', 'phone', 'state', 'district', 'village', 'farmAreaAcres', 'preferredLanguage', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['userId', 'fullName', 'phone', 'state', 'district', 'village', 'farmName', 'farmAreaAcres', 'preferredLanguage', 'createdAt', 'updatedAt']) &&
+        isValidId(data.userId) &&
+        isValidString(data.fullName, 1, 120) &&
+        isValidString(data.phone, 5, 30) &&
+        isValidString(data.state, 1, 80) &&
+        isValidString(data.district, 1, 80) &&
+        isValidString(data.village, 1, 100) &&
+        (!('farmName' in data) || isValidString(data.farmName, 0, 120)) &&
+        data.farmAreaAcres is number && data.farmAreaAcres >= 0 && data.farmAreaAcres <= 100000 &&
+        data.preferredLanguage in ['en', 'ta'] &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidBuyerProfile(data) {
+      return data.keys().hasAll(['userId', 'businessName', 'phone', 'location', 'buyerCategory', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['userId', 'businessName', 'phone', 'location', 'buyerCategory', 'createdAt', 'updatedAt']) &&
+        isValidId(data.userId) &&
+        isValidString(data.businessName, 1, 150) &&
+        isValidString(data.phone, 5, 30) &&
+        isValidString(data.location, 1, 160) &&
+        data.buyerCategory in ['individual', 'retailer', 'wholesaler', 'processor', 'exporter'] &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidProviderProfile(data) {
+      return data.keys().hasAll(['userId', 'businessName', 'serviceCategory', 'contactPhone', 'operatingLocation', 'serviceDescription', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['userId', 'businessName', 'serviceCategory', 'contactPhone', 'operatingLocation', 'serviceDescription', 'createdAt', 'updatedAt']) &&
+        isValidId(data.userId) &&
+        isValidString(data.businessName, 1, 150) &&
+        isValidString(data.serviceCategory, 1, 80) &&
+        isValidString(data.contactPhone, 5, 30) &&
+        isValidString(data.operatingLocation, 1, 160) &&
+        isValidString(data.serviceDescription, 1, 1000) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidExpertProfile(data) {
+      return data.keys().hasAll(['userId', 'fullName', 'specialization', 'qualification', 'operatingRegion', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['userId', 'fullName', 'specialization', 'qualification', 'organization', 'operatingRegion', 'createdAt', 'updatedAt']) &&
+        isValidId(data.userId) &&
+        isValidString(data.fullName, 1, 120) &&
+        isValidString(data.specialization, 1, 120) &&
+        isValidString(data.qualification, 1, 150) &&
+        (!('organization' in data) || isValidString(data.organization, 0, 150)) &&
+        isValidString(data.operatingRegion, 1, 120) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidFarm(data) {
+      return data.keys().hasAll(['farmerId', 'name', 'areaAcres', 'soilType', 'waterSource', 'state', 'district', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['farmerId', 'name', 'areaAcres', 'soilType', 'waterSource', 'state', 'district', 'village', 'latitude', 'longitude', 'createdAt', 'updatedAt']) &&
+        isValidId(data.farmerId) &&
+        isValidString(data.name, 1, 120) &&
+        data.areaAcres is number && data.areaAcres > 0 && data.areaAcres <= 100000 &&
+        isValidString(data.soilType, 1, 80) &&
+        isValidString(data.waterSource, 1, 80) &&
+        isValidString(data.state, 1, 80) &&
+        isValidString(data.district, 1, 80) &&
+        (!('village' in data) || isValidString(data.village, 0, 100)) &&
+        (!('latitude' in data) || (data.latitude is number && data.latitude >= -90 && data.latitude <= 90)) &&
+        (!('longitude' in data) || (data.longitude is number && data.longitude >= -180 && data.longitude <= 180)) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidField(data) {
+      return data.keys().hasAll(['farmerId', 'farmId', 'name', 'areaAcres', 'irrigationMethod', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['farmerId', 'farmId', 'name', 'areaAcres', 'irrigationMethod', 'createdAt', 'updatedAt']) &&
+        isValidId(data.farmerId) &&
+        isValidId(data.farmId) &&
+        isValidString(data.name, 1, 100) &&
+        data.areaAcres is number && data.areaAcres > 0 && data.areaAcres <= 100000 &&
+        isValidString(data.irrigationMethod, 1, 80) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidCrop(data) {
+      return data.keys().hasAll(['farmerId', 'farmId', 'cropName', 'category', 'areaAcres', 'plantingDate', 'stage', 'healthStatus', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['farmerId', 'farmId', 'cropName', 'variety', 'category', 'areaAcres', 'plantingDate', 'expectedHarvestDate', 'expectedYieldKg', 'actualYieldKg', 'estimatedExpenseInr', 'stage', 'healthStatus', 'createdAt', 'updatedAt']) &&
+        isValidId(data.farmerId) &&
+        isValidId(data.farmId) &&
+        isValidString(data.cropName, 1, 100) &&
+        (!('variety' in data) || isValidString(data.variety, 0, 100)) &&
+        isValidString(data.category, 1, 60) &&
+        data.areaAcres is number && data.areaAcres > 0 && data.areaAcres <= 100000 &&
+        isValidString(data.plantingDate, 4, 30) &&
+        (!('expectedHarvestDate' in data) || isValidString(data.expectedHarvestDate, 0, 30)) &&
+        (!('expectedYieldKg' in data) || (data.expectedYieldKg is number && data.expectedYieldKg >= 0 && data.expectedYieldKg <= 10000000)) &&
+        (!('actualYieldKg' in data) || (data.actualYieldKg is number && data.actualYieldKg >= 0 && data.actualYieldKg <= 10000000)) &&
+        (!('estimatedExpenseInr' in data) || (data.estimatedExpenseInr is number && data.estimatedExpenseInr >= 0 && data.estimatedExpenseInr <= 100000000)) &&
+        data.stage in ['sowing', 'vegetative', 'flowering', 'harvesting', 'harvested'] &&
+        data.healthStatus in ['healthy', 'watch', 'at_risk'] &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidCropActivity(data) {
+      return data.keys().hasAll(['farmerId', 'cropId', 'activityType', 'date', 'expenseInr', 'createdAt']) &&
+        data.keys().hasOnly(['farmerId', 'cropId', 'activityType', 'date', 'expenseInr', 'notes', 'createdAt']) &&
+        isValidId(data.farmerId) &&
+        isValidId(data.cropId) &&
+        isValidString(data.activityType, 1, 80) &&
+        isValidString(data.date, 4, 30) &&
+        data.expenseInr is number && data.expenseInr >= 0 && data.expenseInr <= 10000000 &&
+        (!('notes' in data) || isValidString(data.notes, 0, 500)) &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidSoilMeasurement(data) {
+      return data.keys().hasAll(['farmerId', 'farmId', 'fieldName', 'sourceType', 'ph', 'moisturePercent', 'temperatureC', 'nitrogenPpm', 'phosphorusPpm', 'potassiumPpm', 'recordedDate', 'createdAt']) &&
+        data.keys().hasOnly(['farmerId', 'farmId', 'fieldName', 'sourceType', 'ph', 'moisturePercent', 'temperatureC', 'nitrogenPpm', 'phosphorusPpm', 'potassiumPpm', 'recordedDate', 'notes', 'createdAt']) &&
+        isValidId(data.farmerId) &&
+        isValidId(data.farmId) &&
+        isValidString(data.fieldName, 1, 100) &&
+        data.sourceType in ['manual_entry', 'lab_report'] &&
+        data.ph is number && data.ph >= 0 && data.ph <= 14 &&
+        data.moisturePercent is number && data.moisturePercent >= 0 && data.moisturePercent <= 100 &&
+        data.temperatureC is number && data.temperatureC >= -20 && data.temperatureC <= 80 &&
+        data.nitrogenPpm is number && data.nitrogenPpm >= 0 && data.nitrogenPpm <= 10000 &&
+        data.phosphorusPpm is number && data.phosphorusPpm >= 0 && data.phosphorusPpm <= 10000 &&
+        data.potassiumPpm is number && data.potassiumPpm >= 0 && data.potassiumPpm <= 10000 &&
+        isValidString(data.recordedDate, 4, 30) &&
+        (!('notes' in data) || isValidString(data.notes, 0, 500)) &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidIrrigationSchedule(data) {
+      return data.keys().hasAll(['farmerId', 'farmId', 'cropName', 'fieldName', 'scheduledDate', 'scheduledTime', 'durationMinutes', 'waterVolumeLiters', 'method', 'status', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['farmerId', 'farmId', 'cropName', 'fieldName', 'scheduledDate', 'scheduledTime', 'durationMinutes', 'waterVolumeLiters', 'method', 'status', 'notes', 'createdAt', 'updatedAt']) &&
+        isValidId(data.farmerId) &&
+        isValidId(data.farmId) &&
+        isValidString(data.cropName, 1, 100) &&
+        isValidString(data.fieldName, 1, 100) &&
+        isValidString(data.scheduledDate, 4, 30) &&
+        isValidString(data.scheduledTime, 3, 20) &&
+        data.durationMinutes is number && data.durationMinutes > 0 && data.durationMinutes <= 1440 &&
+        data.waterVolumeLiters is number && data.waterVolumeLiters >= 0 && data.waterVolumeLiters <= 10000000 &&
+        data.method in ['drip', 'sprinkler', 'furrow', 'flood', 'manual'] &&
+        data.status in ['scheduled', 'completed', 'skipped'] &&
+        (!('notes' in data) || isValidString(data.notes, 0, 500)) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidPlantHealthReport(data) {
+      return data.keys().hasAll(['farmerId', 'cropType', 'observedSymptoms', 'possibleIssue', 'confidenceLevel', 'uncertaintyNote', 'whenToConsultExpert', 'createdAt']) &&
+        data.keys().hasOnly(['farmerId', 'cropType', 'observedSymptoms', 'possibleIssue', 'confidenceLevel', 'uncertaintyNote', 'visibleSymptoms', 'contributingFactors', 'preventiveSteps', 'whenToConsultExpert', 'imageName', 'createdAt']) &&
+        isValidId(data.farmerId) &&
+        isValidString(data.cropType, 1, 100) &&
+        isValidString(data.observedSymptoms, 1, 1000) &&
+        isValidString(data.possibleIssue, 1, 200) &&
+        data.confidenceLevel in ['Low', 'Moderate', 'High'] &&
+        isValidString(data.uncertaintyNote, 1, 600) &&
+        (!('visibleSymptoms' in data) || (data.visibleSymptoms is list && data.visibleSymptoms.size() <= 10 && (data.visibleSymptoms.size() == 0 || isValidString(data.visibleSymptoms[0], 1, 200)))) &&
+        (!('contributingFactors' in data) || (data.contributingFactors is list && data.contributingFactors.size() <= 10 && (data.contributingFactors.size() == 0 || isValidString(data.contributingFactors[0], 1, 200)))) &&
+        (!('preventiveSteps' in data) || (data.preventiveSteps is list && data.preventiveSteps.size() <= 10 && (data.preventiveSteps.size() == 0 || isValidString(data.preventiveSteps[0], 1, 300)))) &&
+        isValidString(data.whenToConsultExpert, 1, 600) &&
+        (!('imageName' in data) || isValidString(data.imageName, 0, 200)) &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidMarketplaceListing(data) {
+      return data.keys().hasAll(['farmerId', 'farmerName', 'productName', 'cropCategory', 'quantity', 'unit', 'pricePerUnitInr', 'harvestDate', 'location', 'description', 'status', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['farmerId', 'farmerName', 'productName', 'cropCategory', 'quantity', 'unit', 'pricePerUnitInr', 'harvestDate', 'location', 'description', 'imageUrl', 'status', 'createdAt', 'updatedAt']) &&
+        isValidId(data.farmerId) &&
+        isValidString(data.farmerName, 1, 120) &&
+        isValidString(data.productName, 1, 120) &&
+        isValidString(data.cropCategory, 1, 60) &&
+        data.quantity is number && data.quantity >= 0 && data.quantity <= 10000000 &&
+        isValidString(data.unit, 1, 30) &&
+        data.pricePerUnitInr is number && data.pricePerUnitInr > 0 && data.pricePerUnitInr <= 10000000 &&
+        isValidString(data.harvestDate, 4, 30) &&
+        isValidString(data.location, 1, 140) &&
+        isValidString(data.description, 1, 1000) &&
+        (!('imageUrl' in data) || isValidString(data.imageUrl, 0, 500)) &&
+        data.status in ['available', 'reserved', 'sold_out', 'flagged', 'removed'] &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidOrder(data) {
+      return data.keys().hasAll(['listingId', 'productName', 'farmerId', 'farmerName', 'buyerId', 'buyerName', 'quantity', 'unit', 'pricePerUnitInr', 'totalAmountInr', 'deliveryLocation', 'paymentSettlementStatus', 'status', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['listingId', 'productName', 'farmerId', 'farmerName', 'buyerId', 'buyerName', 'quantity', 'unit', 'pricePerUnitInr', 'totalAmountInr', 'deliveryLocation', 'buyerNotes', 'paymentSettlementStatus', 'status', 'reviewRating', 'reviewComment', 'createdAt', 'updatedAt']) &&
+        isValidId(data.listingId) &&
+        isValidString(data.productName, 1, 120) &&
+        isValidId(data.farmerId) &&
+        isValidString(data.farmerName, 1, 120) &&
+        isValidId(data.buyerId) &&
+        isValidString(data.buyerName, 1, 120) &&
+        data.quantity is number && data.quantity > 0 && data.quantity <= 10000000 &&
+        isValidString(data.unit, 1, 30) &&
+        data.pricePerUnitInr is number && data.pricePerUnitInr > 0 &&
+        data.totalAmountInr is number && data.totalAmountInr > 0 &&
+        isValidString(data.deliveryLocation, 1, 200) &&
+        (!('buyerNotes' in data) || isValidString(data.buyerNotes, 0, 500)) &&
+        data.paymentSettlementStatus == 'offline_agreed_pending' &&
+        data.status in ['pending', 'accepted', 'rejected', 'processing', 'ready_for_pickup', 'shipped', 'delivered', 'cancelled', 'completed'] &&
+        (!('reviewRating' in data) || (data.reviewRating is number && data.reviewRating >= 1 && data.reviewRating <= 5)) &&
+        (!('reviewComment' in data) || isValidString(data.reviewComment, 0, 500)) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidServiceListing(data) {
+      return data.keys().hasAll(['providerId', 'providerName', 'title', 'category', 'rateInr', 'rateUnit', 'operatingLocation', 'description', 'availabilityStatus', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['providerId', 'providerName', 'title', 'category', 'rateInr', 'rateUnit', 'operatingLocation', 'description', 'availabilityStatus', 'createdAt', 'updatedAt']) &&
+        isValidId(data.providerId) &&
+        isValidString(data.providerName, 1, 120) &&
+        isValidString(data.title, 1, 120) &&
+        isValidString(data.category, 1, 80) &&
+        data.rateInr is number && data.rateInr > 0 && data.rateInr <= 10000000 &&
+        isValidString(data.rateUnit, 1, 40) &&
+        isValidString(data.operatingLocation, 1, 140) &&
+        isValidString(data.description, 1, 1000) &&
+        data.availabilityStatus in ['available', 'busy', 'paused'] &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidServiceBooking(data) {
+      return data.keys().hasAll(['serviceId', 'serviceTitle', 'providerId', 'providerName', 'farmerId', 'farmerName', 'requestedDate', 'location', 'status', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['serviceId', 'serviceTitle', 'providerId', 'providerName', 'farmerId', 'farmerName', 'requestedDate', 'location', 'notes', 'status', 'createdAt', 'updatedAt']) &&
+        isValidId(data.serviceId) &&
+        isValidString(data.serviceTitle, 1, 120) &&
+        isValidId(data.providerId) &&
+        isValidString(data.providerName, 1, 120) &&
+        isValidId(data.farmerId) &&
+        isValidString(data.farmerName, 1, 120) &&
+        isValidString(data.requestedDate, 4, 30) &&
+        isValidString(data.location, 1, 160) &&
+        (!('notes' in data) || isValidString(data.notes, 0, 500)) &&
+        data.status in ['pending', 'accepted', 'in_progress', 'completed', 'rejected', 'cancelled'] &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidFarmTeamMember(data) {
+      return data.keys().hasAll(['farmerId', 'memberName', 'roleTitle', 'status', 'createdAt']) &&
+        data.keys().hasOnly(['farmerId', 'memberName', 'roleTitle', 'phone', 'assignedArea', 'status', 'createdAt']) &&
+        isValidId(data.farmerId) &&
+        isValidString(data.memberName, 1, 120) &&
+        isValidString(data.roleTitle, 1, 80) &&
+        (!('phone' in data) || isValidString(data.phone, 0, 30)) &&
+        (!('assignedArea' in data) || isValidString(data.assignedArea, 0, 120)) &&
+        data.status in ['active', 'inactive'] &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidFarmTask(data) {
+      return data.keys().hasAll(['farmerId', 'taskName', 'assignedMemberName', 'priority', 'dueDate', 'status', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['farmerId', 'taskName', 'description', 'assignedMemberName', 'priority', 'dueDate', 'status', 'createdAt', 'updatedAt']) &&
+        isValidId(data.farmerId) &&
+        isValidString(data.taskName, 1, 140) &&
+        (!('description' in data) || isValidString(data.description, 0, 600)) &&
+        isValidString(data.assignedMemberName, 1, 120) &&
+        data.priority in ['low', 'medium', 'high', 'urgent'] &&
+        isValidString(data.dueDate, 4, 30) &&
+        data.status in ['todo', 'in_progress', 'completed'] &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidEcoPointsTransaction(data) {
+      return data.keys().hasAll(['userId', 'userName', 'activityCategory', 'description', 'requestedPoints', 'awardedPoints', 'transactionType', 'status', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['userId', 'userName', 'activityCategory', 'description', 'requestedPoints', 'awardedPoints', 'transactionType', 'status', 'reviewedBy', 'createdAt', 'updatedAt']) &&
+        isValidId(data.userId) &&
+        isValidString(data.userName, 1, 120) &&
+        data.activityCategory in ['water_saving', 'recycling', 'organic_composting', 'soil_conservation', 'reward_redemption', 'admin_adjustment'] &&
+        isValidString(data.description, 1, 500) &&
+        data.requestedPoints is number && data.requestedPoints >= 0 && data.requestedPoints <= 10000 &&
+        data.awardedPoints is number && data.awardedPoints >= 0 && data.awardedPoints <= 10000 &&
+        data.transactionType in ['earn', 'redeem'] &&
+        data.status in ['pending', 'verified', 'rejected'] &&
+        (!('reviewedBy' in data) || isValidString(data.reviewedBy, 0, 128)) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidReward(data) {
+      return data.keys().hasAll(['title', 'description', 'pointsCost', 'category', 'active', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['title', 'description', 'pointsCost', 'category', 'active', 'createdAt', 'updatedAt']) &&
+        isValidString(data.title, 1, 120) &&
+        isValidString(data.description, 1, 500) &&
+        data.pointsCost is number && data.pointsCost > 0 && data.pointsCost <= 100000 &&
+        isValidString(data.category, 1, 60) &&
+        data.active is bool &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidNotification(data) {
+      return data.keys().hasAll(['userId', 'senderId', 'category', 'title', 'message', 'read', 'createdAt']) &&
+        data.keys().hasOnly(['userId', 'senderId', 'category', 'title', 'message', 'read', 'createdAt']) &&
+        isValidId(data.userId) &&
+        isValidId(data.senderId) &&
+        data.category in ['order', 'service', 'support', 'task', 'verification', 'announcement', 'eco_points', 'expert'] &&
+        isValidString(data.title, 1, 140) &&
+        isValidString(data.message, 1, 500) &&
+        data.read is bool &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidSupportTicket(data) {
+      return data.keys().hasAll(['userId', 'userName', 'userRole', 'category', 'subject', 'description', 'status', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['userId', 'userName', 'userRole', 'category', 'subject', 'description', 'attachmentName', 'status', 'adminResponse', 'createdAt', 'updatedAt']) &&
+        isValidId(data.userId) &&
+        isValidString(data.userName, 1, 120) &&
+        isValidString(data.userRole, 1, 30) &&
+        isValidString(data.category, 1, 80) &&
+        isValidString(data.subject, 1, 150) &&
+        isValidString(data.description, 1, 1500) &&
+        (!('attachmentName' in data) || isValidString(data.attachmentName, 0, 200)) &&
+        data.status in ['open', 'in_progress', 'waiting_for_response', 'resolved', 'closed'] &&
+        (!('adminResponse' in data) || isValidString(data.adminResponse, 0, 1500)) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidAnnouncement(data) {
+      return data.keys().hasAll(['title', 'body', 'audience', 'active', 'authorId', 'createdAt']) &&
+        data.keys().hasOnly(['title', 'body', 'audience', 'active', 'authorId', 'createdAt']) &&
+        isValidString(data.title, 1, 150) &&
+        isValidString(data.body, 1, 1500) &&
+        data.audience in ['all', 'farmer', 'buyer', 'provider', 'expert'] &&
+        data.active is bool &&
+        isValidId(data.authorId) &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidAuditLog(data) {
+      return data.keys().hasAll(['actorId', 'action', 'targetCollection', 'targetId', 'createdAt']) &&
+        data.keys().hasOnly(['actorId', 'actorEmail', 'action', 'targetCollection', 'targetId', 'details', 'createdAt']) &&
+        isValidId(data.actorId) &&
+        (!('actorEmail' in data) || isValidString(data.actorEmail, 0, 200)) &&
+        isValidString(data.action, 1, 120) &&
+        isValidString(data.targetCollection, 1, 80) &&
+        isValidString(data.targetId, 1, 128) &&
+        (!('details' in data) || isValidString(data.details, 0, 500)) &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidArticle(data) {
+      return data.keys().hasAll(['authorId', 'authorName', 'title', 'category', 'summary', 'content', 'language', 'status', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['authorId', 'authorName', 'title', 'category', 'cropFocus', 'summary', 'content', 'language', 'status', 'createdAt', 'updatedAt']) &&
+        isValidId(data.authorId) &&
+        isValidString(data.authorName, 1, 120) &&
+        isValidString(data.title, 1, 160) &&
+        isValidString(data.category, 1, 80) &&
+        (!('cropFocus' in data) || isValidString(data.cropFocus, 0, 80)) &&
+        isValidString(data.summary, 1, 400) &&
+        isValidString(data.content, 1, 5000) &&
+        data.language in ['en', 'ta'] &&
+        data.status in ['published', 'draft'] &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidExpertQuestion(data) {
+      return data.keys().hasAll(['farmerId', 'farmerName', 'cropName', 'question', 'isPublic', 'status', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['farmerId', 'farmerName', 'cropName', 'question', 'isPublic', 'status', 'answer', 'expertId', 'expertName', 'createdAt', 'updatedAt']) &&
+        isValidId(data.farmerId) &&
+        isValidString(data.farmerName, 1, 120) &&
+        isValidString(data.cropName, 1, 100) &&
+        isValidString(data.question, 1, 1200) &&
+        data.isPublic is bool &&
+        data.status in ['open', 'answered', 'closed'] &&
+        (!('answer' in data) || isValidString(data.answer, 0, 2500)) &&
+        (!('expertId' in data) || isValidString(data.expertId, 0, 128)) &&
+        (!('expertName' in data) || isValidString(data.expertName, 0, 120)) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidPlatformSetting(data) {
+      return data.keys().hasAll(['ecoPointsDefaultReward', 'requireVerificationForListings', 'supportEmail', 'updatedAt']) &&
+        data.keys().hasOnly(['maintenanceNotice', 'ecoPointsDefaultReward', 'requireVerificationForListings', 'supportEmail', 'updatedAt']) &&
+        (!('maintenanceNotice' in data) || isValidString(data.maintenanceNotice, 0, 400)) &&
+        data.ecoPointsDefaultReward is number && data.ecoPointsDefaultReward >= 0 && data.ecoPointsDefaultReward <= 1000 &&
+        data.requireVerificationForListings is bool &&
+        isValidString(data.supportEmail, 3, 150) &&
+        data.updatedAt is timestamp;
+    }
+
+    // ==================== COLLECTION RULES ====================
+
+    match /admins/{adminId} {
+      allow get: if isValidId(adminId) && (isOwner(adminId) || isAdmin());
+      allow list: if isAdmin();
+      allow create, update, delete: if isValidId(adminId) && isAdmin();
+    }
+
+    match /users/{userId} {
+      allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isAdmin();
+      allow create: if isVerifiedUser() && isValidId(userId) && isOwner(userId) &&
+        isValidUser(incoming()) &&
+        incoming().uid == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        incoming().accountStatus == 'active' &&
+        (
+          (incoming().role in ['farmer', 'buyer', 'provider', 'expert'] && incoming().verificationStatus == 'pending') ||
+          (isAdmin() && incoming().role == 'admin' && incoming().verificationStatus == 'verified')
+        );
+      allow update: if isVerifiedUser() && isValidId(userId) &&
+        isValidUser(incoming()) &&
+        incoming().uid == existing().uid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (
+          isAdmin() ||
+          (
+            isOwner(userId) &&
+            incoming().role == existing().role &&
+            incoming().verificationStatus == existing().verificationStatus &&
+            incoming().accountStatus == existing().accountStatus &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['fullName', 'phone', 'preferredLanguage', 'state', 'district', 'village', 'updatedAt'])
+          )
+        );
+      allow delete: if isValidId(userId) && isAdmin();
+    }
+
+    match /farmer_profiles/{userId} {
+      allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isAdmin();
+      allow create: if isVerifiedUser() && isValidId(userId) && isOwner(userId) &&
+        isValidFarmerProfile(incoming()) && incoming().userId == request.auth.uid &&
+        incoming().createdAt == request.time && incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser() && isValidId(userId) &&
+        isValidFarmerProfile(incoming()) &&
+        incoming().userId == existing().userId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (isAdmin() || (isOwner(userId) && incoming().diff(existing()).affectedKeys().hasOnly(['fullName', 'phone', 'state', 'district', 'village', 'farmName', 'farmAreaAcres', 'preferredLanguage', 'updatedAt'])));
+      allow delete: if isValidId(userId) && isAdmin();
+    }
+
+    match /buyer_profiles/{userId} {
+      allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isAdmin();
+      allow create: if isVerifiedUser() && isValidId(userId) && isOwner(userId) &&
+        isValidBuyerProfile(incoming()) && incoming().userId == request.auth.uid &&
+        incoming().createdAt == request.time && incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser() && isValidId(userId) &&
+        isValidBuyerProfile(incoming()) &&
+        incoming().userId == existing().userId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (isAdmin() || (isOwner(userId) && incoming().diff(existing()).affectedKeys().hasOnly(['businessName', 'phone', 'location', 'buyerCategory', 'updatedAt'])));
+      allow delete: if isValidId(userId) && isAdmin();
+    }
+
+    match /provider_profiles/{userId} {
+      allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isAdmin();
+      allow create: if isVerifiedUser() && isValidId(userId) && isOwner(userId) &&
+        isValidProviderProfile(incoming()) && incoming().userId == request.auth.uid &&
+        incoming().createdAt == request.time && incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser() && isValidId(userId) &&
+        isValidProviderProfile(incoming()) &&
+        incoming().userId == existing().userId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (isAdmin() || (isOwner(userId) && incoming().diff(existing()).affectedKeys().hasOnly(['businessName', 'serviceCategory', 'contactPhone', 'operatingLocation', 'serviceDescription', 'updatedAt'])));
+      allow delete: if isValidId(userId) && isAdmin();
+    }
+
+    match /expert_profiles/{userId} {
+      allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isAdmin();
+      allow create: if isVerifiedUser() && isValidId(userId) && isOwner(userId) &&
+        isValidExpertProfile(incoming()) && incoming().userId == request.auth.uid &&
+        incoming().createdAt == request.time && incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser() && isValidId(userId) &&
+        isValidExpertProfile(incoming()) &&
+        incoming().userId == existing().userId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (isAdmin() || (isOwner(userId) && incoming().diff(existing()).affectedKeys().hasOnly(['fullName', 'specialization', 'qualification', 'organization', 'operatingRegion', 'updatedAt'])));
+      allow delete: if isValidId(userId) && isAdmin();
+    }
+
+    match /farms/{farmId} {
+      allow get: if isValidId(farmId) && isSignedIn() && (existing().farmerId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (existing().farmerId == request.auth.uid || isAdmin());
+      allow create: if isVerifiedUser() && isValidId(farmId) && isValidFarm(incoming()) &&
+        incoming().farmerId == request.auth.uid &&
+        incoming().createdAt == request.time && incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser() && isValidId(farmId) && isValidFarm(incoming()) &&
+        incoming().farmerId == existing().farmerId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (isAdmin() || (existing().farmerId == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'areaAcres', 'soilType', 'waterSource', 'state', 'district', 'village', 'latitude', 'longitude', 'updatedAt'])));
+      allow delete: if isVerifiedUser() && isValidId(farmId) && (existing().farmerId == request.auth.uid || isAdmin());
+    }
+
+    match /fields/{fieldId} {
+      allow get: if isValidId(fieldId) && isSignedIn() && (existing().farmerId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (existing().farmerId == request.auth.uid || isAdmin());
+      allow create: if isVerifiedUser() && isValidId(fieldId) && isValidField(incoming()) &&
+        incoming().farmerId == request.auth.uid &&
+        incoming().createdAt == request.time && incoming().updatedAt == request.time &&
+        ownsFarm(incoming().farmId);
+      allow update: if isVerifiedUser() && isValidId(fieldId) && isValidField(incoming()) &&
+        incoming().farmerId == existing().farmerId &&
+        incoming().farmId == existing().farmId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (isAdmin() || (existing().farmerId == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'areaAcres', 'irrigationMethod', 'updatedAt'])));
+      allow delete: if isVerifiedUser() && isValidId(fieldId) && (existing().farmerId == request.auth.uid || isAdmin());
+    }
+
+    match /crops/{cropId} {
+      allow get: if isValidId(cropId) && isSignedIn() && (existing().farmerId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (existing().farmerId == request.auth.uid || isAdmin());
+      allow create: if isVerifiedUser() && isValidId(cropId) && isValidCrop(incoming()) &&
+        incoming().farmerId == request.auth.uid &&
+        incoming().createdAt == request.time && incoming().updatedAt == request.time &&
+        ownsFarm(incoming().farmId);
+      allow update: if isVerifiedUser() && isValidId(cropId) && isValidCrop(incoming()) &&
+        incoming().farmerId == existing().farmerId &&
+        incoming().farmId == existing().farmId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (isAdmin() || (existing().farmerId == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['cropName', 'variety', 'category', 'areaAcres', 'plantingDate', 'expectedHarvestDate', 'expectedYieldKg', 'actualYieldKg', 'estimatedExpenseInr', 'stage', 'healthStatus', 'updatedAt'])));
+      allow delete: if isVerifiedUser() && isValidId(cropId) && (existing().farmerId == request.auth.uid || isAdmin());
+    }
+
+    match /crop_activities/{activityId} {
+      allow get: if isValidId(activityId) && isSignedIn() && (existing().farmerId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (existing().farmerId == request.auth.uid || isAdmin());
+      allow create: if isVerifiedUser() && isValidId(activityId) && isValidCropActivity(incoming()) &&
+        incoming().farmerId == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        exists(/databases/$(database)/documents/crops/$(incoming().cropId)) &&
+        get(/databases/$(database)/documents/crops/$(incoming().cropId)).data.farmerId == request.auth.uid;
+      allow update: if false;
+      allow delete: if isVerifiedUser() && isValidId(activityId) && (existing().farmerId == request.auth.uid || isAdmin());
+    }
+
+    match /soil_measurements/{measurementId} {
+      allow get: if isValidId(measurementId) && isSignedIn() && (existing().farmerId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (existing().farmerId == request.auth.uid || isAdmin());
+      allow create: if isVerifiedUser() && isValidId(measurementId) && isValidSoilMeasurement(incoming()) &&
+        incoming().farmerId == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        ownsFarm(incoming().farmId);
+      allow update: if false;
+      allow delete: if isVerifiedUser() && isValidId(measurementId) && (existing().farmerId == request.auth.uid || isAdmin());
+    }
+
+    match /irrigation_schedules/{scheduleId} {
+      allow get: if isValidId(scheduleId) && isSignedIn() && (existing().farmerId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (existing().farmerId == request.auth.uid || isAdmin());
+      allow create: if isVerifiedUser() && isValidId(scheduleId) && isValidIrrigationSchedule(incoming()) &&
+        incoming().farmerId == request.auth.uid &&
+        incoming().createdAt == request.time && incoming().updatedAt == request.time &&
+        ownsFarm(incoming().farmId);
+      allow update: if isVerifiedUser() && isValidId(scheduleId) && isValidIrrigationSchedule(incoming()) &&
+        incoming().farmerId == existing().farmerId &&
+        incoming().farmId == existing().farmId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (isAdmin() || (existing().farmerId == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['scheduledDate', 'scheduledTime', 'durationMinutes', 'waterVolumeLiters', 'method', 'status', 'notes', 'updatedAt'])));
+      allow delete: if isVerifiedUser() && isValidId(scheduleId) && (existing().farmerId == request.auth.uid || isAdmin());
+    }
+
+    match /plant_health_reports/{reportId} {
+      allow get: if isValidId(reportId) && isSignedIn() && (existing().farmerId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (existing().farmerId == request.auth.uid || isAdmin());
+      allow create: if isVerifiedUser() && isValidId(reportId) && isValidPlantHealthReport(incoming()) &&
+        incoming().farmerId == request.auth.uid &&
+        incoming().createdAt == request.time;
+      allow update: if false;
+      allow delete: if isVerifiedUser() && isValidId(reportId) && (existing().farmerId == request.auth.uid || isAdmin());
+    }
+
+    match /marketplace_listings/{listingId} {
+      allow get: if isValidId(listingId) && (existing().status == 'available' || (isSignedIn() && existing().farmerId == request.auth.uid) || isAdmin());
+      allow list: if existing().status == 'available' || (isSignedIn() && existing().farmerId == request.auth.uid) || isAdmin();
+      allow create: if isVerifiedUser() && isValidId(listingId) && isValidMarketplaceListing(incoming()) &&
+        incoming().farmerId == request.auth.uid &&
+        incoming().status in ['available', 'reserved'] &&
+        incoming().createdAt == request.time && incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser() && isValidId(listingId) && isValidMarketplaceListing(incoming()) &&
+        incoming().farmerId == existing().farmerId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (
+          isAdmin() ||
+          (existing().farmerId == request.auth.uid && incoming().status in ['available', 'reserved', 'sold_out', 'removed'] &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['productName', 'cropCategory', 'quantity', 'unit', 'pricePerUnitInr', 'harvestDate', 'location', 'description', 'imageUrl', 'status', 'updatedAt']))
+        );
+      allow delete: if isVerifiedUser() && isValidId(listingId) && (existing().farmerId == request.auth.uid || isAdmin());
+    }
+
+    match /orders/{orderId} {
+      allow get: if isValidId(orderId) && isSignedIn() && (existing().farmerId == request.auth.uid || existing().buyerId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (existing().farmerId == request.auth.uid || existing().buyerId == request.auth.uid || isAdmin());
+      allow create: if isVerifiedUser() && isValidId(orderId) && isValidOrder(incoming()) &&
+        incoming().buyerId == request.auth.uid &&
+        incoming().farmerId != request.auth.uid &&
+        incoming().status == 'pending' &&
+        incoming().createdAt == request.time && incoming().updatedAt == request.time &&
+        exists(/databases/$(database)/documents/marketplace_listings/$(incoming().listingId));
+      allow update: if isVerifiedUser() && isValidId(orderId) && isValidOrder(incoming()) &&
+        incoming().listingId == existing().listingId &&
+        incoming().farmerId == existing().farmerId &&
+        incoming().buyerId == existing().buyerId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (
+          isAdmin() ||
+          (
+            !(existing().status in ['completed', 'rejected', 'cancelled']) &&
+            (
+              (existing().farmerId == request.auth.uid &&
+                incoming().status in ['accepted', 'rejected', 'processing', 'ready_for_pickup', 'shipped', 'delivered'] &&
+                incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])) ||
+              (existing().buyerId == request.auth.uid &&
+                existing().status == 'pending' &&
+                incoming().status == 'cancelled' &&
+                incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])) ||
+              (existing().buyerId == request.auth.uid &&
+                existing().status == 'delivered' &&
+                incoming().status == 'completed' &&
+                incoming().diff(existing()).affectedKeys().hasOnly(['status', 'reviewRating', 'reviewComment', 'updatedAt']))
+            )
+          )
+        );
+      allow delete: if isValidId(orderId) && isAdmin();
+    }
+
+    match /service_listings/{serviceId} {
+      allow get: if isValidId(serviceId) && (existing().availabilityStatus == 'available' || (isSignedIn() && existing().providerId == request.auth.uid) || isAdmin());
+      allow list: if existing().availabilityStatus == 'available' || (isSignedIn() && existing().providerId == request.auth.uid) || isAdmin();
+      allow create: if isVerifiedUser() && isValidId(serviceId) && isValidServiceListing(incoming()) &&
+        incoming().providerId == request.auth.uid &&
+        incoming().createdAt == request.time && incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser() && isValidId(serviceId) && isValidServiceListing(incoming()) &&
+        incoming().providerId == existing().providerId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (isAdmin() || (existing().providerId == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'category', 'rateInr', 'rateUnit', 'operatingLocation', 'description', 'availabilityStatus', 'updatedAt'])));
+      allow delete: if isVerifiedUser() && isValidId(serviceId) && (existing().providerId == request.auth.uid || isAdmin());
+    }
+
+    match /service_bookings/{bookingId} {
+      allow get: if isValidId(bookingId) && isSignedIn() && (existing().farmerId == request.auth.uid || existing().providerId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (existing().farmerId == request.auth.uid || existing().providerId == request.auth.uid || isAdmin());
+      allow create: if isVerifiedUser() && isValidId(bookingId) && isValidServiceBooking(incoming()) &&
+        incoming().farmerId == request.auth.uid &&
+        incoming().status == 'pending' &&
+        incoming().createdAt == request.time && incoming().updatedAt == request.time &&
+        exists(/databases/$(database)/documents/service_listings/$(incoming().serviceId));
+      allow update: if isVerifiedUser() && isValidId(bookingId) && isValidServiceBooking(incoming()) &&
+        incoming().serviceId == existing().serviceId &&
+        incoming().providerId == existing().providerId &&
+        incoming().farmerId == existing().farmerId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (
+          isAdmin() ||
+          (
+            !(existing().status in ['completed', 'rejected', 'cancelled']) &&
+            (
+              (existing().providerId == request.auth.uid &&
+                incoming().status in ['accepted', 'in_progress', 'completed', 'rejected'] &&
+                incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])) ||
+              (existing().farmerId == request.auth.uid &&
+                existing().status == 'pending' &&
+                incoming().status == 'cancelled' &&
+                incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']))
+            )
+          )
+        );
+      allow delete: if isValidId(bookingId) && isAdmin();
+    }
+
+    match /farm_teams/{memberId} {
+      allow get: if isValidId(memberId) && isSignedIn() && (existing().farmerId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (existing().farmerId == request.auth.uid || isAdmin());
+      allow create: if isVerifiedUser() && isValidId(memberId) && isValidFarmTeamMember(incoming()) &&
+        incoming().farmerId == request.auth.uid &&
+        incoming().createdAt == request.time;
+      allow update: if isVerifiedUser() && isValidId(memberId) && isValidFarmTeamMember(incoming()) &&
+        incoming().farmerId == existing().farmerId &&
+        incoming().createdAt == existing().createdAt &&
+        (isAdmin() || (existing().farmerId == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['memberName', 'roleTitle', 'phone', 'assignedArea', 'status'])));
+      allow delete: if isVerifiedUser() && isValidId(memberId) && (existing().farmerId == request.auth.uid || isAdmin());
+    }
+
+    match /farm_tasks/{taskId} {
+      allow get: if isValidId(taskId) && isSignedIn() && (existing().farmerId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (existing().farmerId == request.auth.uid || isAdmin());
+      allow create: if isVerifiedUser() && isValidId(taskId) && isValidFarmTask(incoming()) &&
+        incoming().farmerId == request.auth.uid &&
+        incoming().createdAt == request.time && incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser() && isValidId(taskId) && isValidFarmTask(incoming()) &&
+        incoming().farmerId == existing().farmerId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (isAdmin() || (existing().farmerId == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['taskName', 'description', 'assignedMemberName', 'priority', 'dueDate', 'status', 'updatedAt'])));
+      allow delete: if isVerifiedUser() && isValidId(taskId) && (existing().farmerId == request.auth.uid || isAdmin());
+    }
+
+    match /eco_points_transactions/{txId} {
+      allow get: if isValidId(txId) && isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+      allow create: if isVerifiedUser() && isValidId(txId) && isValidEcoPointsTransaction(incoming()) &&
+        incoming().createdAt == request.time && incoming().updatedAt == request.time &&
+        (
+          isAdmin() ||
+          (incoming().userId == request.auth.uid && incoming().status == 'pending' && incoming().awardedPoints == 0)
+        );
+      allow update: if isVerifiedUser() && isValidId(txId) && isValidEcoPointsTransaction(incoming()) &&
+        incoming().userId == existing().userId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        isAdmin();
+      allow delete: if isValidId(txId) && isAdmin();
+    }
+
+    match /rewards/{rewardId} {
+      allow get: if isValidId(rewardId) && (existing().active == true || isAdmin());
+      allow list: if existing().active == true || isAdmin();
+      allow create: if isValidId(rewardId) && isAdmin() && isValidReward(incoming()) &&
+        incoming().createdAt == request.time && incoming().updatedAt == request.time;
+      allow update: if isValidId(rewardId) && isAdmin() && isValidReward(incoming()) &&
+        incoming().createdAt == existing().createdAt && incoming().updatedAt == request.time;
+      allow delete: if isValidId(rewardId) && isAdmin();
+    }
+
+    match /notifications/{notificationId} {
+      allow get: if isValidId(notificationId) && isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+      allow create: if isVerifiedUser() && isValidId(notificationId) && isValidNotification(incoming()) &&
+        incoming().senderId == request.auth.uid &&
+        incoming().read == false &&
+        incoming().createdAt == request.time;
+      allow update: if isVerifiedUser() && isValidId(notificationId) && isValidNotification(incoming()) &&
+        incoming().userId == existing().userId &&
+        incoming().senderId == existing().senderId &&
+        incoming().createdAt == existing().createdAt &&
+        (isAdmin() || (existing().userId == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['read'])));
+      allow delete: if isVerifiedUser() && isValidId(notificationId) && (existing().userId == request.auth.uid || isAdmin());
+    }
+
+    match /support_tickets/{ticketId} {
+      allow get: if isValidId(ticketId) && isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+      allow create: if isVerifiedUser() && isValidId(ticketId) && isValidSupportTicket(incoming()) &&
+        incoming().userId == request.auth.uid &&
+        incoming().status == 'open' &&
+        incoming().createdAt == request.time && incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser() && isValidId(ticketId) && isValidSupportTicket(incoming()) &&
+        incoming().userId == existing().userId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (
+          isAdmin() ||
+          (existing().userId == request.auth.uid &&
+            !(existing().status in ['resolved', 'closed']) &&
+            incoming().status == 'closed' &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']))
+        );
+      allow delete: if isValidId(ticketId) && isAdmin();
+    }
+
+    match /platform_announcements/{announcementId} {
+      allow get: if isValidId(announcementId) && (existing().active == true || isAdmin());
+      allow list: if existing().active == true || isAdmin();
+      allow create: if isValidId(announcementId) && isAdmin() && isValidAnnouncement(incoming()) &&
+        incoming().authorId == request.auth.uid && incoming().createdAt == request.time;
+      allow update: if isValidId(announcementId) && isAdmin() && isValidAnnouncement(incoming()) &&
+        incoming().authorId == existing().authorId && incoming().createdAt == existing().createdAt;
+      allow delete: if isValidId(announcementId) && isAdmin();
+    }
+
+    match /audit_logs/{logId} {
+      allow get: if isValidId(logId) && isAdmin();
+      allow list: if isAdmin();
+      allow create: if isVerifiedUser() && isValidId(logId) && isValidAuditLog(incoming()) &&
+        incoming().actorId == request.auth.uid && incoming().createdAt == request.time;
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    match /educational_articles/{articleId} {
+      allow get: if isValidId(articleId) && (existing().status == 'published' || (isSignedIn() && existing().authorId == request.auth.uid) || isAdmin());
+      allow list: if existing().status == 'published' || (isSignedIn() && existing().authorId == request.auth.uid) || isAdmin();
+      allow create: if isVerifiedUser() && isValidId(articleId) && isValidArticle(incoming()) &&
+        incoming().authorId == request.auth.uid &&
+        incoming().createdAt == request.time && incoming().updatedAt == request.time &&
+        (isAdmin() || isExpertUser());
+      allow update: if isVerifiedUser() && isValidId(articleId) && isValidArticle(incoming()) &&
+        incoming().authorId == existing().authorId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (isAdmin() || (existing().authorId == request.auth.uid && isExpertUser() && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'category', 'cropFocus', 'summary', 'content', 'language', 'status', 'updatedAt'])));
+      allow delete: if isVerifiedUser() && isValidId(articleId) && (existing().authorId == request.auth.uid || isAdmin());
+    }
+
+    match /expert_questions/{questionId} {
+      allow get: if isValidId(questionId) && (existing().isPublic == true || (isSignedIn() && existing().farmerId == request.auth.uid) || isExpertUser() || isAdmin());
+      allow list: if existing().isPublic == true || (isSignedIn() && existing().farmerId == request.auth.uid) || isAdmin();
+      allow create: if isVerifiedUser() && isValidId(questionId) && isValidExpertQuestion(incoming()) &&
+        incoming().farmerId == request.auth.uid &&
+        incoming().status == 'open' &&
+        incoming().createdAt == request.time && incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser() && isValidId(questionId) && isValidExpertQuestion(incoming()) &&
+        incoming().farmerId == existing().farmerId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (
+          isAdmin() ||
+          (isExpertUser() && existing().status != 'closed' &&
+            incoming().expertId == request.auth.uid &&
+            incoming().status == 'answered' &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['answer', 'expertId', 'expertName', 'status', 'updatedAt'])) ||
+          (existing().farmerId == request.auth.uid &&
+            incoming().status == 'closed' &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']))
+        );
+      allow delete: if isValidId(questionId) && isAdmin();
+    }
+
+    match /platform_settings/{settingId} {
+      allow get: if isValidId(settingId) && isSignedIn();
+      allow list: if isAdmin();
+      allow create, update: if isValidId(settingId) && isAdmin() && isValidPlatformSetting(incoming()) && incoming().updatedAt == request.time;
+      allow delete: if false;
+    }
+  }
+}

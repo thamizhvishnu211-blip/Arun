@@ -1,0 +1,6 @@
+{
+  "name": "AgriSphere",
+  "description": "One Platform. Every Farmer. A Smarter Agricultural Future — unified digital agricultural ecosystem for farmers, buyers, service providers, experts, and administrators.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
